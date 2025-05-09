@@ -63,6 +63,7 @@ def submit_correction_n(correction, chat):
     return chat
 
 def generate_n(stage_num, chat, stage_outputs):
+    print(f"Generating for stage {stage_num} with chat: {chat} and stage_outputs: {stage_outputs}")
     context = get_stage_context(stage_num, stage_outputs)
     corrections = "\n".join([msg[0] for msg in chat])
     template = prompt_templates[stage_num]
@@ -86,7 +87,7 @@ with gr.Blocks(title="LLM Wizard",theme=gr.themes.Soft()) as app:
                 with gr.Column():
                     prompt = gr.Textbox(label="Initial Prompt", lines=3)
                     correction1 = gr.Textbox(label="New Correction")
-                    chat1 = gr.Chatbot(label="Corrections History", height=height_correction)
+                    chat1 = gr.Chatbot(label="Corrections History", height=height_correction, type='messages')
                     # gen_btn1 = gr.Button("Generate")
                 output1 = gr.Textbox(label="Current Output", interactive=True, lines=15)
             # save_btn1 = gr.Button("Save Edits & Lock Stage")
@@ -98,7 +99,7 @@ with gr.Blocks(title="LLM Wizard",theme=gr.themes.Soft()) as app:
                 save_btn2 = gr.Button("Save", scale=0)
             with gr.Row():
                 with gr.Column():
-                    chat2 = gr.Chatbot(label="Corrections History", height=height_correction)
+                    chat2 = gr.Chatbot(label="Corrections History", height=height_correction, type='messages')
                     correction2 = gr.Textbox(label="New Correction")
                     #gen_btn2 = gr.Button("Generate")
                 output2 = gr.Textbox(label="Current Output", interactive=True, lines=15)
@@ -111,7 +112,7 @@ with gr.Blocks(title="LLM Wizard",theme=gr.themes.Soft()) as app:
                 save_btn3 = gr.Button("Save", scale=0)
             with gr.Row():
                 with gr.Column():
-                    chat3 = gr.Chatbot(label="Corrections History", height=height_correction)
+                    chat3 = gr.Chatbot(label="Corrections History", height=height_correction, type='messages')
                     correction3 = gr.Textbox(label="New Correction")
                     #gen_btn3 = gr.Button("Generate")
                 output3 = gr.Textbox(label="Current Output", interactive=True, lines=15)
@@ -133,7 +134,7 @@ with gr.Blocks(title="LLM Wizard",theme=gr.themes.Soft()) as app:
                 save_btn4 = gr.Button("Save", scale=0)
             with gr.Row():
                 with gr.Column():
-                    chat4 = gr.Chatbot(label="Corrections History", height=height_correction)
+                    chat4 = gr.Chatbot(label="Corrections History", height=height_correction, type='messages')
                     correction4 = gr.Textbox(label="New Correction")
                     #gen_btn4 = gr.Button("Generate")
                 output4 = gr.Textbox(label="Current Output", interactive=True, lines=15)
@@ -166,7 +167,7 @@ with gr.Blocks(title="LLM Wizard",theme=gr.themes.Soft()) as app:
             inputs=[gr.State(i), chat_box, stage_outputs],
             outputs=output_box
         )
-        
+
         save_btn.click(
             lambda stage_num, out, outputs: save_n(stage_num, out, outputs),
             inputs=[gr.State(i), output_box, stage_outputs],
