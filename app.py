@@ -1,5 +1,7 @@
 import gradio as gr
 import os 
+from fastapi import FastAPI
+from gradio import mount_gradio_app
 
 height_correction = 200
 
@@ -204,5 +206,14 @@ with gr.Blocks(title="LLM Wizard",theme=gr.themes.Soft()) as app:
 
     # rerender_btn.click(rerender_mermaid, None, mermaid_diagram)
 
+# if __name__ == "__main__":
+#     app.launch()
+
+# Create a FastAPI app
+fastapi_app = FastAPI()
+
+# Mount the Gradio app to the FastAPI app
+mount_gradio_app(fastapi_app, app, path="/")
+
 if __name__ == "__main__":
-    app.launch()
+    app.launch()  # may be removed if only uvicorn is used to run the app
