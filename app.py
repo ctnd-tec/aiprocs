@@ -152,24 +152,41 @@ with gr.Blocks(title="LLM Wizard",theme=gr.themes.Soft()) as app:
 
     # Stage 2-4 Events
     for i in range(2, 5):
-        correction_box = locals()[f"correction{i}"]
-        chat_box = locals()[f"chat{i}"]
-        gen_btn = locals()[f"gen_btn{i}"]
-        output_box = locals()[f"output{i}"]
-        save_btn = locals()[f"save_btn{i}"]
+        # correction_box = locals()[f"correction{i}"]
+        # chat_box = locals()[f"chat{i}"]
+        # gen_btn = locals()[f"gen_btn{i}"]
+        # output_box = locals()[f"output{i}"]
+        # save_btn = locals()[f"save_btn{i}"]
+        correction_box = globals()[f"correction{i}"]
+        chat_box = globals()[f"chat{i}"]
+        gen_btn = globals()[f"gen_btn{i}"]
+        output_box = globals()[f"output{i}"]
+        save_btn = globals()[f"save_btn{i}"]
         
         correction_box.submit(
             submit_correction_n, [correction_box, chat_box], [chat_box]
         ).then(lambda: "", None, correction_box)
         
+        # Ensure the generate button is properly linked
         gen_btn.click(
-            lambda stage_num, chat, outputs: generate_n(stage_num, chat, outputs),
+            generate_n,
             inputs=[gr.State(i), chat_box, stage_outputs],
             outputs=output_box
         )
 
+        # gen_btn.click(
+        #     lambda stage_num, chat, outputs: generate_n(stage_num, chat, outputs),
+        #     inputs=[gr.State(i), chat_box, stage_outputs],
+        #     outputs=output_box
+        # )
+
+        # save_btn.click(
+        #     lambda stage_num, out, outputs: save_n(stage_num, out, outputs),
+        #     inputs=[gr.State(i), output_box, stage_outputs],
+        #     outputs=stage_outputs
+        # )
         save_btn.click(
-            lambda stage_num, out, outputs: save_n(stage_num, out, outputs),
+            save_n,
             inputs=[gr.State(i), output_box, stage_outputs],
             outputs=stage_outputs
         )
