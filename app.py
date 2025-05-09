@@ -212,8 +212,8 @@ with gr.Blocks(title="LLM Wizard",theme=gr.themes.Soft()) as app:
 # Create a FastAPI app
 fastapi_app = FastAPI()
 
-# Mount the Gradio app to the FastAPI app
-mount_gradio_app(fastapi_app, app, path="/")
+# Mount the Gradio app to the FastAPI app at the root path
+mount_gradio_app(fastapi_app, app, path="")
 
 if __name__ == "__main__":
     app.launch()  # may be removed if only uvicorn is used to run the app
