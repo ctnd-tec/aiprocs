@@ -1,4 +1,10 @@
-Generation instructions for stage 3
+Generate a process flowchart using Mermaid based on the Information given. Follow the Template below.
 
+- Template:
+"
+[Mermaid diagram code]
+"
+
+- Information:
 {context}
 

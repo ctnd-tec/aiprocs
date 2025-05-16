@@ -1,1 +1,13 @@
-Generation instructions for stage 4
+Generate documentation for a process based on the Information given. Use formal, neutral language. Follow the Template below.
+
+- Template:
+"
+**Title**: "[Process Name] Protocol"  
+    - **Introduction**: Purpose, scope, definitions.  
+     - **Procedure**: Step-by-step instructions with responsible roles.  
+     - **Appendices**: Glossary, version history, references. 
+"
+
+
+- Information:
+{context}

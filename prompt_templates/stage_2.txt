@@ -1,3 +1,10 @@
-Generation instructions for stage 2
+Generate process roles and responsibilities based on the Information given. Write in a concise way. Do not use markdown. Follow the Template below.
 
+- Template:
+"
+Roles:
+[Roles and responsibilities as bullet points]
+"
+
+- Information:
 {context}
