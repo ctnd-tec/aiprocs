@@ -172,8 +172,12 @@ def generate_1(prompt, chat, stage_outputs, planet_name, output1):
         formatted_prompt = template.format(context=context, corrections=corrections)
     deployment_name = planet_to_deployment[planet_name]
     llm_generator = get_llm_response(formatted_prompt, corrections, template, deployment_name)
+    last_chunk = ""
     for chunk in llm_generator:
+        last_chunk = chunk
         yield chunk
+    # After generation, autosave
+    stage_outputs[1] = last_chunk
 
 def save_1(output_text, stage_outputs):
     stage_outputs[1] = output_text
@@ -201,8 +205,12 @@ def generate_n(stage_num, chat, stage_outputs, planet_name, output_box):
         formatted_prompt = template.format(context=context, corrections=corrections)
     deployment_name = planet_to_deployment[planet_name]
     llm_generator = get_llm_response(formatted_prompt, corrections, template, deployment_name)
+    last_chunk = ""
     for chunk in llm_generator:
+        last_chunk = chunk
         yield chunk
+    # After generation, autosave
+    stage_outputs[stage_num] = last_chunk
 
 def save_n(stage_num, output_text, stage_outputs):
     stage_outputs[stage_num] = output_text
