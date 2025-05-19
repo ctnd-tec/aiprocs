@@ -13,7 +13,7 @@ DEBUG_MODE = os.getenv('DEBUG_MODE', 'False').lower() == 'true'  # Set in .env
 height_correction = 200
 
 # Parse available models from environment variable
-DEPLOYMENT_NAMES = os.getenv("DEPLOYMENT_NAMES", "gpt4").split(",")
+DEPLOYMENT_NAMES = os.getenv("DEPLOYMENT_NAMES").split(",")
 DEPLOYMENT_NAMES = [name.strip() for name in DEPLOYMENT_NAMES if name.strip()]
 
 # Mask model names with planet names
