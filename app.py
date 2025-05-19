@@ -12,6 +12,24 @@ load_dotenv()
 DEBUG_MODE = os.getenv('DEBUG_MODE', 'False').lower() == 'true'  # Set in .env
 height_correction = 200
 
+# Parse available models from environment variable
+DEPLOYMENT_NAMES = os.getenv("DEPLOYMENT_NAMES", "gpt4").split(",")
+DEPLOYMENT_NAMES = [name.strip() for name in DEPLOYMENT_NAMES if name.strip()]
+
+# Mask model names with planet names
+PLANET_NAMES = [
+    "Mercury", "Venus", "Earth", "Mars", "Jupiter",
+    "Saturn", "Uranus", "Neptune", "Pluto", "Ceres",
+    "Eris", "Haumea", "Makemake"
+]
+# Map planet names to deployment names
+planet_to_deployment = {}
+deployment_to_planet = {}
+for i, deployment in enumerate(DEPLOYMENT_NAMES):
+    planet = PLANET_NAMES[i % len(PLANET_NAMES)]
+    planet_to_deployment[planet] = deployment
+    deployment_to_planet[deployment] = planet
+
 # Only initialize Azure client if not in debug mode
 if not DEBUG_MODE:
     from openai import AzureOpenAI
@@ -35,14 +53,14 @@ prompt_templates = load_prompt_templates()
 
 def simulate_llm(formatted_prompt, corrections, template=None):
     """Mock LLM function for debug mode"""
+    #{template}
+    # Corrections to be made:
+    # {corrections}
+    # Context:
     mock_response = f"""DEBUG MODE ACTIVE:
-{template}
 
-Context:
+
 {formatted_prompt}
-
-Corrections:
-{corrections}
 
 Generated Text: none
 """
@@ -52,11 +70,26 @@ Generated Text: none
         time.sleep(0.02)  # Simulate delay
         yield accumulated
 
-def azure_llm_call(formatted_prompt):
+def filter_deepseek_thinking(text):
+    """
+    Removes content between <think> and </think> tags for DeepSeek R1 outputs.
+    If <think> is found, removes it and everything up to and including </think>.
+    """
+    start_tag = "<think>"
+    end_tag = "</think>"
+    start_idx = text.find(start_tag)
+    end_idx = text.find(end_tag, start_idx + len(start_tag))
+    if start_idx != -1 and end_idx != -1:
+        # Remove the <think>...</think> block
+        filtered = text[:start_idx] + text[end_idx + len(end_tag):]
+        return filtered.strip()
+    return text
+
+def azure_llm_call(formatted_prompt, deployment_name):
     """Actual Azure LLM call with streaming"""
     try:
         response = client.chat.completions.create(
-            model=os.getenv("DEPLOYMENT_NAME"),
+            model=deployment_name,
             messages=[
                 {"role": "system", "content": "You are a technical documentation expert."},
                 {"role": "user", "content": formatted_prompt}
@@ -65,39 +98,80 @@ def azure_llm_call(formatted_prompt):
             max_tokens=2000,
             stream=True
         )
-        accumulated = ""
-        for chunk in response:
-            # Handle possible empty choices in chunk
-            if chunk.choices and len(chunk.choices) > 0:
-                delta = chunk.choices[0].delta
-                if delta and delta.content:
-                    accumulated += delta.content
-                    yield accumulated
+        if deployment_name.lower().startswith("deepseek"):
+            # Buffer output until all <think>...</think> is gone, then stream
+            buffer = ""
+            thinking_removed = False
+            for chunk in response:
+                if chunk.choices and len(chunk.choices) > 0:
+                    delta = chunk.choices[0].delta
+                    if delta and delta.content:
+                        buffer += delta.content
+                        if not thinking_removed:
+                            # Remove <think>...</think> if present
+                            filtered = filter_deepseek_thinking(buffer)
+                            if filtered != buffer:
+                                # <think>...</think> was present and removed
+                                buffer = filtered
+                                if buffer:
+                                    thinking_removed = True
+                                    yield buffer
+                            elif "<think>" not in buffer:
+                                # No <think> tag at all, start streaming
+                                thinking_removed = True
+                                if buffer:
+                                    yield buffer
+                        else:
+                            yield buffer
+        else:
+            accumulated = ""
+            for chunk in response:
+                if chunk.choices and len(chunk.choices) > 0:
+                    delta = chunk.choices[0].delta
+                    if delta and delta.content:
+                        accumulated += delta.content
+                        yield accumulated
     except Exception as e:
         yield f"Error generating response: {str(e)}"
 
-def get_llm_response(formatted_prompt, corrections, template):
+def get_llm_response(formatted_prompt, corrections, template, deployment_name):
     """Router function that handles debug/production mode"""
     if DEBUG_MODE:
         return simulate_llm(formatted_prompt, corrections, template)
-    return azure_llm_call(formatted_prompt)
+    return azure_llm_call(formatted_prompt, deployment_name)
 
 def get_stage_context(stage_num, stage_outputs):
     """Collect outputs from previous stages"""
     return "\n".join([f"Stage {i} Output:\n{stage_outputs[i]}" for i in range(1, stage_num) if stage_outputs[i]])
 
-# Stage 1 Functions
-def submit_correction_1(correction, chat):
-    if correction.strip():
-        chat.append((correction, ""))
-    return chat
+# --- Correction Prompt Construction ---
+def build_correction_prompt(correction, input_text):
+    return f"Incorporate the following corrections to the given Input.\nCorrections: {correction}\nInput: {input_text}"
 
-def generate_1(prompt, chat, stage_outputs):
-    context = f"Initial Prompt: {prompt}"
-    corrections = "\n".join([msg[0] for msg in chat])
-    template = prompt_templates[1]
-    formatted_prompt = template.format(context=context, corrections=corrections)
-    llm_generator = get_llm_response(formatted_prompt, corrections, template)
+# Stage 1 Functions
+def submit_correction_1(correction, output1, chat):
+    # Only last correction is relevant
+    if correction.strip():
+        chat = [(correction, "")]
+    else:
+        chat = []
+    return chat, gr.update(value="")  # Clear correction box
+
+def generate_1(prompt, chat, stage_outputs, planet_name, output1):
+    # If chat has a correction, use correction prompt, else use normal template
+    if chat and chat[-1][0].strip():
+        correction = chat[-1][0]
+        input_text = output1
+        formatted_prompt = build_correction_prompt(correction, input_text)
+        template = None  # Not used in correction mode
+        corrections = correction
+    else:
+        context = f"Initial Prompt: {prompt}"
+        corrections = ""
+        template = prompt_templates[1]
+        formatted_prompt = template.format(context=context, corrections=corrections)
+    deployment_name = planet_to_deployment[planet_name]
+    llm_generator = get_llm_response(formatted_prompt, corrections, template, deployment_name)
     for chunk in llm_generator:
         yield chunk
 
@@ -106,17 +180,27 @@ def save_1(output_text, stage_outputs):
     return stage_outputs
 
 # Stage 2-4 Functions
-def submit_correction_n(correction, chat):
+def submit_correction_n(correction, output_box, chat):
     if correction.strip():
-        chat.append((correction, ""))
-    return chat
+        chat = [(correction, "")]
+    else:
+        chat = []
+    return chat, gr.update(value="")  # Clear correction box
 
-def generate_n(stage_num, chat, stage_outputs):
-    context = get_stage_context(stage_num, stage_outputs)
-    corrections = "\n".join([msg[0] for msg in chat])
-    template = prompt_templates[stage_num]
-    formatted_prompt = template.format(context=context, corrections=corrections)
-    llm_generator = get_llm_response(formatted_prompt, corrections, template)
+def generate_n(stage_num, chat, stage_outputs, planet_name, output_box):
+    if chat and chat[-1][0].strip():
+        correction = chat[-1][0]
+        input_text = output_box
+        formatted_prompt = build_correction_prompt(correction, input_text)
+        template = None
+        corrections = correction
+    else:
+        context = get_stage_context(stage_num, stage_outputs)
+        corrections = ""
+        template = prompt_templates[stage_num]
+        formatted_prompt = template.format(context=context, corrections=corrections)
+    deployment_name = planet_to_deployment[planet_name]
+    llm_generator = get_llm_response(formatted_prompt, corrections, template, deployment_name)
     for chunk in llm_generator:
         yield chunk
 
@@ -127,7 +211,18 @@ def save_n(stage_num, output_text, stage_outputs):
 # Gradio UI Setup
 with gr.Blocks(title="LLM Wizard", theme=gr.themes.Soft()) as app:
     stage_outputs = gr.State({1: "", 2: "", 3: "", 4: ""})
-    
+
+    with gr.Row():
+        with gr.Column(scale=1):
+            model_selector = gr.Dropdown(
+                list(planet_to_deployment.keys()),
+                value=list(planet_to_deployment.keys())[0],
+                label="Select Model",
+                interactive=True
+            )
+        with gr.Column(scale=9):
+            pass  # Placeholder for main content
+
     with gr.Tabs() as stages:
         # Stage 1
         with gr.Tab("Overview"):
@@ -182,25 +277,36 @@ with gr.Blocks(title="LLM Wizard", theme=gr.themes.Soft()) as app:
                 output4 = gr.Textbox(label="Current Output", interactive=True, lines=15)
 
     # Event Handlers
-    correction1.submit(submit_correction_1, [correction1, chat1], [chat1]).then(
-        lambda: "", None, correction1)
-    gen_btn1.click(generate_1, [prompt, chat1, stage_outputs], output1)
+    # Stage 1: Correction submit triggers both chat update and generation
+    correction1.submit(
+        submit_correction_1, [correction1, output1, chat1], [chat1, correction1]
+    ).then(
+        generate_1, [prompt, chat1, stage_outputs, model_selector, output1], output1
+    )
+    gen_btn1.click(
+        generate_1, [prompt, chat1, stage_outputs, model_selector, output1], output1
+    )
     save_btn1.click(save_1, [output1, stage_outputs], [stage_outputs])
 
+    # Stages 2-4: Correction submit triggers both chat update and generation
     for i in range(2, 5):
         correction_box = globals()[f"correction{i}"]
         chat_box = globals()[f"chat{i}"]
         gen_btn = globals()[f"gen_btn{i}"]
         output_box = globals()[f"output{i}"]
         save_btn = globals()[f"save_btn{i}"]
-        
+
         correction_box.submit(
-            submit_correction_n, [correction_box, chat_box], [chat_box]
-        ).then(lambda: "", None, correction_box)
-        
+            submit_correction_n, [correction_box, output_box, chat_box], [chat_box, correction_box]
+        ).then(
+            generate_n,
+            inputs=[gr.State(i), chat_box, stage_outputs, model_selector, output_box],
+            outputs=output_box
+        )
+
         gen_btn.click(
             generate_n,
-            inputs=[gr.State(i), chat_box, stage_outputs],
+            inputs=[gr.State(i), chat_box, stage_outputs, model_selector, output_box],
             outputs=output_box
         )
 
