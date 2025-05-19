@@ -1,4 +1,5 @@
-Generate process roles and responsibilities based on the Information given. Write in a concise way. Do not use markdown. Follow the Template below.
+Generate process roles and responsibilities most relevant to the process described in the Informatio given.  
+Write in a concise way. Do not use markdown. Follow the Template below.
 
 - Template:
 "
