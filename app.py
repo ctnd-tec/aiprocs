@@ -10,6 +10,11 @@ load_dotenv()
 
 # Configuration
 DEBUG_MODE = os.getenv('DEBUG_MODE', 'False').lower() == 'true'  # Set in .env
+print(f"DEBUG_MODE: {DEBUG_MODE} (raw: {os.getenv('DEBUG_MODE')})")
+
+DEBUG_STREAMING = os.getenv('DEBUG_STREAMING', 'True').lower() == 'true'  # Set in .env
+print(f"DEBUG_STREAMING: {DEBUG_STREAMING} (raw: {os.getenv('DEBUG_STREAMING')})")
+
 height_correction = 200
 
 # Parse available models from environment variable
@@ -64,11 +69,14 @@ def simulate_llm(formatted_prompt, corrections, template=None):
 
 Generated Text: none
 """
-    accumulated = ""
-    for char in mock_response:
-        accumulated += char
-        time.sleep(0.02)  # Simulate delay
-        yield accumulated
+    if DEBUG_STREAMING:
+        accumulated = ""
+        for char in mock_response:
+            accumulated += char
+            time.sleep(0.02)  # Simulate delay
+            yield accumulated
+    else:
+        yield mock_response
 
 def filter_deepseek_thinking(text):
     """
@@ -145,8 +153,12 @@ def get_stage_context(stage_num, stage_outputs):
     return "\n".join([f"Stage {i} Output:\n{stage_outputs[i]}" for i in range(1, stage_num) if stage_outputs[i]])
 
 # --- Correction Prompt Construction ---
-def build_correction_prompt(correction, input_text):
-    return f"Incorporate the following corrections to the given Input.\nCorrections: {correction}\nInput: {input_text}"
+def build_correction_prompt(correction, input_text, process_context):
+    return (
+        f"Incorporate the following corrections to the given Input. Take into account the context if not blank and needed\n"
+        f"Corrections: {correction}\nInput: {input_text}"
+        f"Context: {process_context}\n"
+    )
 
 # Stage 1 Functions
 def submit_correction_1(correction, output1, chat):
@@ -157,7 +169,7 @@ def submit_correction_1(correction, output1, chat):
         chat = []
     return chat, gr.update(value="")  # Clear correction box
 
-def generate_1(prompt, chat, stage_outputs, planet_name, output1):
+def generate_1(prompt, chat, stage_outputs, planet_name, output1, process_context):
     # If chat has a correction, use correction prompt, else use normal template
     if chat and chat[-1][0].strip():
         correction = chat[-1][0]
@@ -166,7 +178,7 @@ def generate_1(prompt, chat, stage_outputs, planet_name, output1):
         template = None  # Not used in correction mode
         corrections = correction
     else:
-        context = f"Initial Prompt: {prompt}"
+        context = f"Initial Prompt: {prompt}\n\n\nProcess Context: {process_context}"
         corrections = ""
         template = prompt_templates[1]
         formatted_prompt = template.format(context=context, corrections=corrections)
@@ -183,6 +195,11 @@ def save_1(output_text, stage_outputs):
     stage_outputs[1] = output_text
     return stage_outputs
 
+def save_context(context_value, stage_outputs):
+    # Example: store context in stage_outputs or another state
+    stage_outputs["context"] = context_value
+    return stage_outputs
+
 # Stage 2-4 Functions
 def submit_correction_n(correction, output_box, chat):
     if correction.strip():
@@ -191,15 +208,15 @@ def submit_correction_n(correction, output_box, chat):
         chat = []
     return chat, gr.update(value="")  # Clear correction box
 
-def generate_n(stage_num, chat, stage_outputs, planet_name, output_box):
+def generate_n(stage_num, chat, stage_outputs, planet_name, output_box, process_context):
     if chat and chat[-1][0].strip():
         correction = chat[-1][0]
         input_text = output_box
-        formatted_prompt = build_correction_prompt(correction, input_text)
+        formatted_prompt = build_correction_prompt(correction, input_text, process_context)
         template = None
         corrections = correction
     else:
-        context = get_stage_context(stage_num, stage_outputs)
+        context = get_stage_context(stage_num, stage_outputs) + f"\n\n\nProcess Context: {process_context}"
         corrections = ""
         template = prompt_templates[stage_num]
         formatted_prompt = template.format(context=context, corrections=corrections)
@@ -217,7 +234,7 @@ def save_n(stage_num, output_text, stage_outputs):
     return stage_outputs
 
 # Gradio UI Setup
-with gr.Blocks(title="LLM Wizard", theme=gr.themes.Soft()) as app:
+with gr.Blocks(title="AIPROCS", theme=gr.themes.Soft()) as app:
     stage_outputs = gr.State({1: "", 2: "", 3: "", 4: ""})
 
     with gr.Row():
@@ -236,19 +253,18 @@ with gr.Blocks(title="LLM Wizard", theme=gr.themes.Soft()) as app:
         with gr.Tab("Overview"):
             with gr.Row():
                 gen_btn1 = gr.Button("Generate", scale=0)
-                save_btn1 = gr.Button("Save", scale=0)
             with gr.Row():
                 with gr.Column():
                     prompt = gr.Textbox(label="Initial Prompt", lines=3)
                     correction1 = gr.Textbox(label="New Correction")
                     chat1 = gr.Chatbot(label="Corrections History", height=height_correction)
+                    process_context = gr.Textbox(label="Process Context", lines=2, value="", interactive=True)
                 output1 = gr.Textbox(label="Current Output", interactive=True, lines=15)
         
         # Stage 2
         with gr.Tab("Roles & Responsibilities"):
             with gr.Row():
                 gen_btn2 = gr.Button("Generate", scale=0)
-                save_btn2 = gr.Button("Save", scale=0)
             with gr.Row():
                 with gr.Column():
                     chat2 = gr.Chatbot(label="Corrections History", height=height_correction)
@@ -259,7 +275,6 @@ with gr.Blocks(title="LLM Wizard", theme=gr.themes.Soft()) as app:
         with gr.Tab("Diagram"):
             with gr.Row():
                 gen_btn3 = gr.Button("Generate", scale=0)
-                save_btn3 = gr.Button("Save", scale=0)
             with gr.Row():
                 with gr.Column():
                     chat3 = gr.Chatbot(label="Corrections History", height=height_correction)
@@ -277,7 +292,6 @@ with gr.Blocks(title="LLM Wizard", theme=gr.themes.Soft()) as app:
         with gr.Tab("Full text"):
             with gr.Row():
                 gen_btn4 = gr.Button("Generate", scale=0)
-                save_btn4 = gr.Button("Save", scale=0)
             with gr.Row():
                 with gr.Column():
                     chat4 = gr.Chatbot(label="Corrections History", height=height_correction)
@@ -285,44 +299,51 @@ with gr.Blocks(title="LLM Wizard", theme=gr.themes.Soft()) as app:
                 output4 = gr.Textbox(label="Current Output", interactive=True, lines=15)
 
     # Event Handlers
+    # Stage 1: Output box auto-save on change
+    output1.change(
+        save_1, [output1, stage_outputs], [stage_outputs]
+    )
     # Stage 1: Correction submit triggers both chat update and generation
     correction1.submit(
         submit_correction_1, [correction1, output1, chat1], [chat1, correction1]
     ).then(
-        generate_1, [prompt, chat1, stage_outputs, model_selector, output1], output1
+        generate_1, [prompt, chat1, stage_outputs, model_selector, output1, process_context], output1
     )
     gen_btn1.click(
-        generate_1, [prompt, chat1, stage_outputs, model_selector, output1], output1
+        generate_1, [prompt, chat1, stage_outputs, model_selector, output1, process_context], output1
     )
-    save_btn1.click(save_1, [output1, stage_outputs], [stage_outputs])
 
+    process_context.change(
+    save_context, [process_context, stage_outputs], [stage_outputs]
+)
+
+    # Stages 2-4: Output box auto-save on change
+    for i in range(2, 5):
+        output_box = globals()[f"output{i}"]
+        output_box.change(
+            save_n, [gr.State(i), output_box, stage_outputs], [stage_outputs]
+        )
     # Stages 2-4: Correction submit triggers both chat update and generation
     for i in range(2, 5):
         correction_box = globals()[f"correction{i}"]
         chat_box = globals()[f"chat{i}"]
         gen_btn = globals()[f"gen_btn{i}"]
         output_box = globals()[f"output{i}"]
-        save_btn = globals()[f"save_btn{i}"]
 
         correction_box.submit(
             submit_correction_n, [correction_box, output_box, chat_box], [chat_box, correction_box]
         ).then(
             generate_n,
-            inputs=[gr.State(i), chat_box, stage_outputs, model_selector, output_box],
+            inputs=[gr.State(i), chat_box, stage_outputs, model_selector, output_box, process_context],
             outputs=output_box
         )
 
         gen_btn.click(
             generate_n,
-            inputs=[gr.State(i), chat_box, stage_outputs, model_selector, output_box],
+            inputs=[gr.State(i), chat_box, stage_outputs, model_selector, output_box, process_context],
             outputs=output_box
         )
 
-        save_btn.click(
-            save_n,
-            inputs=[gr.State(i), output_box, stage_outputs],
-            outputs=stage_outputs
-        )
 
 # FastAPI integration
 fastapi_app = FastAPI()
