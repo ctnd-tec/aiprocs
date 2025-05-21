@@ -234,6 +234,11 @@ def save_n(stage_num, output_text, stage_outputs):
     stage_outputs[stage_num] = output_text
     return stage_outputs
 
+# def update_mermaid_diagram(output3_text):
+#     """Wrap diagram code in Mermaid syntax"""
+#     return f"```mermaid\n{output3_text}\n```"
+
+
 def clear_all_fields():
     return (
         "",  # prompt
@@ -454,6 +459,12 @@ with gr.Blocks(title="AIPROCS", theme=gr.themes.Soft()) as app:
             inputs=[gr.State(i), chat_box, stage_outputs, model_selector, output_box, process_context],
             outputs=output_box
         )
+
+    # output3.change(
+    #     update_mermaid_diagram, 
+    #     inputs=output3, 
+    #     outputs=mermaid_diagram
+    # )
 
 
 # FastAPI integration
