@@ -1,4 +1,4 @@
-Generate a process flowchart using Mermaid based on the Information given. Follow the Template below.
+Generate a process flowchart using Mermaid based on the Information given. Take into account the process and global contexts, if provided. Follow the Template below.
 
 - Template:
 "

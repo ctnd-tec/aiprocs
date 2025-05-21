@@ -1,4 +1,4 @@
-Generate process information from the given Description. Do not use markdown. Follow the Template below.
+Generate process information from the given Description. Take into account the process and global contexts, if provided. Follow the Template below.
 
 - Template:
 "

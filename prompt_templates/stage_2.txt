@@ -1,4 +1,4 @@
-Generate process roles and responsibilities most relevant to the process described in the Informatio given.  
+Generate process roles and responsibilities most relevant to the process described in the Information given. Take into account the process and global contexts, if provided. 
 Write in a concise way. Do not use markdown. Follow the Template below.
 
 - Template:

@@ -1,4 +1,4 @@
-Generate documentation for a process based on the Information given. Use formal, neutral language. Follow the Template below.
+Generate documentation for a process based on the Information given. Take into account the process and global contexts, if provided. Use formal, neutral language. Follow the Template below.
 
 - Template:
 "
