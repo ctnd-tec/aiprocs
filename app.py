@@ -16,6 +16,7 @@ DEBUG_STREAMING = os.getenv('DEBUG_STREAMING', 'True').lower() == 'true'  # Set 
 print(f"DEBUG_STREAMING: {DEBUG_STREAMING} (raw: {os.getenv('DEBUG_STREAMING')})")
 
 height_correction = 200
+height_output = 26  # lines
 
 # Parse available models from environment variable
 DEPLOYMENT_NAMES = os.getenv("DEPLOYMENT_NAMES").split(",")
@@ -174,7 +175,7 @@ def generate_1(prompt, chat, stage_outputs, planet_name, output1, process_contex
     if chat and chat[-1][0].strip():
         correction = chat[-1][0]
         input_text = output1
-        formatted_prompt = build_correction_prompt(correction, input_text)
+        formatted_prompt = build_correction_prompt(correction, input_text, process_context)
         template = None  # Not used in correction mode
         corrections = correction
     else:
@@ -233,20 +234,50 @@ def save_n(stage_num, output_text, stage_outputs):
     stage_outputs[stage_num] = output_text
     return stage_outputs
 
+def clear_all_fields():
+    return (
+        "",  # prompt
+        "",  # process_context
+        "", "", "", "",  # corrections 1-4
+        [], [], [], [],  # chats 1-4
+        "", "", "", ""   # outputs 1-4
+    )
+
 # Gradio UI Setup
 with gr.Blocks(title="AIPROCS", theme=gr.themes.Soft()) as app:
+    browser_state = gr.BrowserState(
+        {
+            "prompt": "",
+            "process_context": "",
+            "correction1": "",
+            "correction2": "",
+            "correction3": "",
+            "correction4": "",
+            "chat1": [],
+            "chat2": [],
+            "chat3": [],
+            "chat4": [],
+            "output1": "",
+            "output2": "",
+            "output3": "",
+            "output4": "",
+            "model_selector": list(planet_to_deployment.keys())[0]
+        }
+    )
     stage_outputs = gr.State({1: "", 2: "", 3: "", 4: ""})
 
     with gr.Row():
-        with gr.Column(scale=1):
-            model_selector = gr.Dropdown(
-                list(planet_to_deployment.keys()),
-                value=list(planet_to_deployment.keys())[0],
-                label="Select Model",
-                interactive=True
-            )
-        with gr.Column(scale=9):
-            pass  # Placeholder for main content
+        model_selector = gr.Dropdown(
+            list(planet_to_deployment.keys()),
+            value=list(planet_to_deployment.keys())[0],
+            label="Select Model",
+            scale=0,  # Prevent expansion
+            interactive=True
+        )
+        clear_btn = gr.Button("Clear", scale=0)
+    # Optionally, add more widgets here for horizontal stacking
+    with gr.Column(scale=9):
+        pass  # Placeholder for main content
 
     with gr.Tabs() as stages:
         # Stage 1
@@ -259,7 +290,7 @@ with gr.Blocks(title="AIPROCS", theme=gr.themes.Soft()) as app:
                     correction1 = gr.Textbox(label="New Correction")
                     chat1 = gr.Chatbot(label="Corrections History", height=height_correction)
                     process_context = gr.Textbox(label="Process Context", lines=2, value="", interactive=True)
-                output1 = gr.Textbox(label="Current Output", interactive=True, lines=15)
+                output1 = gr.Textbox(label="Current Output", interactive=True, lines=height_output)
         
         # Stage 2
         with gr.Tab("Roles & Responsibilities"):
@@ -269,7 +300,7 @@ with gr.Blocks(title="AIPROCS", theme=gr.themes.Soft()) as app:
                 with gr.Column():
                     chat2 = gr.Chatbot(label="Corrections History", height=height_correction)
                     correction2 = gr.Textbox(label="New Correction")
-                output2 = gr.Textbox(label="Current Output", interactive=True, lines=15)
+                output2 = gr.Textbox(label="Current Output", interactive=True, lines=height_output)
         
         # Stage 3
         with gr.Tab("Diagram"):
@@ -279,7 +310,7 @@ with gr.Blocks(title="AIPROCS", theme=gr.themes.Soft()) as app:
                 with gr.Column():
                     chat3 = gr.Chatbot(label="Corrections History", height=height_correction)
                     correction3 = gr.Textbox(label="New Correction")
-                output3 = gr.Textbox(label="Current Output", interactive=True, lines=15)
+                output3 = gr.Textbox(label="Current Output", interactive=True, lines=height_output)
                 mermaid_diagram = gr.Markdown(value="""
                     ```mermaid
                     graph LR
@@ -296,9 +327,89 @@ with gr.Blocks(title="AIPROCS", theme=gr.themes.Soft()) as app:
                 with gr.Column():
                     chat4 = gr.Chatbot(label="Corrections History", height=height_correction)
                     correction4 = gr.Textbox(label="New Correction")
-                output4 = gr.Textbox(label="Current Output", interactive=True, lines=15)
+                output4 = gr.Textbox(label="Current Output", interactive=True, lines=height_output)
+    
+    @app.load(inputs=[browser_state], outputs=[
+        prompt, process_context,
+        correction1, correction2, correction3, correction4,
+        chat1, chat2, chat3, chat4,
+        output1, output2, output3, output4,
+        model_selector
+    ])
+    def load_from_browser_state(state):
+        return (
+            state.get("prompt", ""),
+            state.get("process_context", ""),
+            state.get("correction1", ""),
+            state.get("correction2", ""),
+            state.get("correction3", ""),
+            state.get("correction4", ""),
+            state.get("chat1", []),
+            state.get("chat2", []),
+            state.get("chat3", []),
+            state.get("chat4", []),
+            state.get("output1", ""),
+            state.get("output2", ""),
+            state.get("output3", ""),
+            state.get("output4", ""),
+            state.get("model_selector", list(planet_to_deployment.keys())[0])
+        )
+    
+    @gr.on(
+        [
+            prompt.change, process_context.change,
+            correction1.change, correction2.change, correction3.change, correction4.change,
+            chat1.change, chat2.change, chat3.change, chat4.change,
+            output1.change, output2.change, output3.change, output4.change,
+            model_selector.change
+        ],
+        inputs=[
+            prompt, process_context,
+            correction1, correction2, correction3, correction4,
+            chat1, chat2, chat3, chat4,
+            output1, output2, output3, output4,
+            model_selector
+        ],
+        outputs=[browser_state]
+    )
+    def save_to_browser_state(
+        prompt_val, process_context_val,
+        corr1, corr2, corr3, corr4,
+        ch1, ch2, ch3, ch4,
+        out1, out2, out3, out4,
+        model_selector_val
+    ):
+        return {
+            "prompt": prompt_val,
+            "process_context": process_context_val,
+            "correction1": corr1,
+            "correction2": corr2,
+            "correction3": corr3,
+            "correction4": corr4,
+            "chat1": ch1,
+            "chat2": ch2,
+            "chat3": ch3,
+            "chat4": ch4,
+            "output1": out1,
+            "output2": out2,
+            "output3": out3,
+            "output4": out4,
+            "model_selector": model_selector_val
+        }
 
     # Event Handlers
+
+    # Clear all button
+    clear_btn.click(
+    clear_all_fields,
+    inputs=[],
+    outputs=[
+        prompt, process_context,
+        correction1, correction2, correction3, correction4,
+        chat1, chat2, chat3, chat4,
+        output1, output2, output3, output4
+    ]
+)
     # Stage 1: Output box auto-save on change
     output1.change(
         save_1, [output1, stage_outputs], [stage_outputs]
